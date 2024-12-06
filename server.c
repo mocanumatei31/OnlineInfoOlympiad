@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 #define PORT 8080
 
@@ -65,19 +66,46 @@ int main() {
 };
 
 void *treat(void *arg) {
+    const char *directory_name = "UserSources\0";
     struct thData tdL;
     tdL = *((struct thData *) arg);
     printf("[thread]- %d - Asteptam mesajul...\n", tdL.idThread);
-    fflush(stdout);
-    pthread_detach(pthread_self());
-    char msg[1024];
-    if (read(tdL.cl, &msg, sizeof(msg)) <= 0) {
-        printf("[Thread %d]\n", tdL.idThread);
-        perror("Reading Error.\n");
+    struct stat st = {0};
+    if(stat(directory_name, &st) == -1) {
+        if(mkdir(directory_name, 0777) == -1) {
+            perror("[server]Eroare la mkdir().\n");
+            return errno;
+        }
     }
-    printf("[Thread %d]Mesajul a fost receptionat...%s\n", tdL.idThread, msg);
-    printf("[Thread %d]Trimitem mesajul inapoi...%s\n", tdL.idThread, msg);
-    if (write(tdL.cl, &msg, sizeof(msg)) <= 0) {
+    char temp[100];
+    sprintf(temp, "%s/source_c%d.c", directory_name,tdL.idThread);
+    char *newFile = (char *) malloc(strlen(temp) + 1);
+    fflush(stdout);
+    printf("%s\n", temp);
+    FILE* dstFile = fopen(temp, "wb");
+    char msg[512];
+    int valread;
+    while(1) {
+        int tmp;
+        read(tdL.cl, &tmp, sizeof(tmp));
+        printf("%d\n",tmp);
+        valread = ntohl(tmp);
+        printf("Number: %d\n\n", valread);
+        if(valread == 0) {
+            break;
+        }
+        read(tdL.cl, &msg, valread);
+        fwrite(msg, 1, valread, dstFile);
+        bzero(msg, sizeof(msg));
+        fflush(dstFile);
+    }
+    printf("6\n");
+    printf("[Thread %d]Mesajul a fost receptionat...\n", tdL.idThread);
+    printf("[Thread %d]Trimitem mesajul inapoi...\n", tdL.idThread);
+    bzero(msg, 512);
+    fclose(dstFile);
+    char* message = "File Received!\n\0";
+    if (write(tdL.cl, &message, sizeof(message)) <= 0) {
         printf("[Thread %d] ", tdL.idThread);
         perror("[Thread]Eroare la write() catre client.\n");
     }
