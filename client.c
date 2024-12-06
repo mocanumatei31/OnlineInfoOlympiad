@@ -29,13 +29,13 @@ int main(void) {
         perror("Connection Error");
         return errno;
     }
-    FILE* srcFile = NULL;
-    char* realmsg = NULL;
-    while(srcFile == NULL) {
+    FILE *srcFile = NULL;
+    char *realmsg = NULL;
+    while (srcFile == NULL) {
         printf("[client]Introduceti path-ul fisierului pe care doriti sa il incarcati: ");
         fflush(stdout);
         bzero(msg, sizeof(msg));
-        if(realmsg != NULL) bzero(realmsg, sizeof(realmsg));
+        if (realmsg != NULL) bzero(realmsg, sizeof(realmsg));
         read(0, msg, sizeof(msg));
         msg[strlen(msg) - 1] = '\0';
         fflush(stdout);
@@ -44,28 +44,27 @@ int main(void) {
     }
     printf("[client] Se trimite fisierul %s\n", realmsg);
     fflush(stdout);
-    if(srcFile == NULL) return 0;
     char buffer[512] = {0};
     bzero(buffer, sizeof(buffer));
     int bytes_read;
-    while((bytes_read = fread(buffer, 1, sizeof(buffer), srcFile)) > 0) {
-        printf("%d\n", bytes_read);
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), srcFile)) > 0) {
         int sent_length = htonl(bytes_read);
         write(sd, &sent_length, sizeof(sent_length));
         write(sd, buffer, bytes_read);
         bzero(buffer, sizeof(buffer));
     }
-    printf("%d\n",bytes_read);
     bytes_read = htonl(bytes_read);
-    //1610612736
-    printf("%d\n", bytes_read);
     write(sd, &bytes_read, sizeof(bytes_read));
-    printf("5\n");
-    char response[1024];
-    if (read(sd, &response, sizeof(response)) < 0) {
+    char response[1024] = {0};
+    bzero(response, sizeof(response));
+    int val = 0;
+    read(sd, &val, sizeof(val));
+    val = ntohl(val);
+    if (read(sd, &response, val) < 0) {
         perror("[client]Reading Error.\n");
         return errno;
     }
+    fflush(stdout);
     printf("[client]Mesajul primit este: %s\n", response);
     close(sd);
 }
