@@ -8,25 +8,53 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 #include <sys/stat.h>
 
 #define PORT 8080
 
 extern int errno;
 
-typedef struct thData {
-    int idThread;
-    int cl;
+char * conv_addr (struct sockaddr_in address) {
+    static char str[25];
+    char port[7];
+    strcpy (str, inet_ntoa (address.sin_addr));
+    bzero (port, 7);
+    sprintf (port, ":%d", ntohs (address.sin_port));
+    strcat (str, port);
+    return (str);
+}
+
+typedef struct Contestant {
+    int id;
+    int fd;
 } thData;
 
-void *client_handler(void *);
+struct Contestant contestants[100];
+int contestants_size;
+
+int client_handler(struct Contestant contestant);
+
+struct Contestant findContestant(int fd) {
+    for (int i = 0; i < contestants_size; i++) {
+        if (contestants[i].fd == fd) {
+            return contestants[i];
+        }
+    }
+}
+
 
 int main() {
     struct sockaddr_in server;
     struct sockaddr_in from;
+    fd_set readfds;
+    fd_set actfds;
+    struct timeval tv;
     int sd;
-    pthread_t th[100];
+    int optval=1;
+    int len;
     int i = 0;
+    int id_cnt = 0;
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("[server]Eroare la socket().\n");
         return errno;
@@ -48,28 +76,59 @@ int main() {
         perror("[server]Eroare la listen().\n");
         return errno;
     }
+    FD_ZERO (&actfds);
+    FD_SET (sd, &actfds);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    int nfds = sd;
     while (1) {
-        int client;
-        int length = sizeof (from);
-        printf("[server]Asteptam la portul %d...\n",PORT);
-        fflush(stdout);
-        if ((client = accept(sd, (struct sockaddr *) &from, &length)) < 0) {
-            perror("[server]Eroare la accept().\n");
-            continue;
+        bcopy ((char *) &actfds, (char *) &readfds, sizeof (readfds));
+        if (select (nfds+1, &readfds, NULL, NULL, &tv) < 0)
+        {
+            perror ("[server] Eroare la select().\n");
+            return errno;
         }
-        thData *td = malloc(sizeof(struct thData));
-        td->idThread = i++;
-        td->cl = client;
+        if (FD_ISSET (sd, &readfds))
+        {
+            len = sizeof (from);
+            bzero (&from, sizeof (from));
+            int client = accept(sd, (struct sockaddr *) &from, &len);
+            if (client < 0)
+            {
+                perror ("[server] Eroare la accept().\n");
+                continue;
+            }
 
-        pthread_create(&th[i], NULL, &client_handler, td);
+            if (nfds < client)
+                nfds = client;
+            FD_SET (client, &actfds);
+            printf("[server] S-a conectat clientul cu descriptorul %d, de la adresa %s.\n",client, conv_addr (from));
+            struct Contestant contestant;
+            contestant.fd = client;
+            contestant.id = id_cnt++;
+            contestants[contestants_size++] = contestant;
+            fflush (stdout);
+        }
+        for (int fd = 0; fd <= nfds; fd++)
+        {
+            if (fd != sd && FD_ISSET (fd, &readfds))
+            {
+                struct Contestant contestant = findContestant(fd);
+                if (client_handler(contestant))
+                {
+                    printf ("[server] S-a deconectat clientul cu descriptorul %d.\n",fd);
+                    fflush (stdout);
+                    close (fd);
+                    FD_CLR (fd, &actfds);
+                }
+            }
+        }
     }
 };
 
-void *client_handler(void *arg) {
+int client_handler(struct Contestant contestant) {
     const char *directory_name = "UserSources\0";
-    struct thData tdL;
-    tdL = *((struct thData *) arg);
-    printf("[thread]- %d - Asteptam mesajul...\n", tdL.idThread);
+    printf("[thread]- %d - Asteptam mesajul...\n", contestant.id);
     struct stat st = {0};
     if (stat(directory_name, &st) == -1) {
         if (mkdir(directory_name, 0777) == -1) {
@@ -78,36 +137,35 @@ void *client_handler(void *arg) {
         }
     }
     char temp[100];
-    sprintf(temp, "%s/source_c%d.c", directory_name, tdL.idThread);
+    sprintf(temp, "%s/source_c%d.c", directory_name, contestant.id);
     fflush(stdout);
     FILE *dstFile = fopen(temp, "wb");
     char msg[512];
     int valread;
     while (1) {
         int tmp;
-        read(tdL.cl, &tmp, sizeof(tmp));
+        read(contestant.fd, &tmp, sizeof(tmp));
         valread = ntohl(tmp);
         if (valread == 0) {
             break;
         }
-        read(tdL.cl, &msg, valread);
+        read(contestant.fd, &msg, valread);
         fwrite(msg, 1, valread, dstFile);
         bzero(msg, sizeof(msg));
         fflush(dstFile);
     }
-    printf("[Thread %d]Mesajul a fost receptionat...\n", tdL.idThread);
-    printf("[Thread %d]Trimitem mesajul inapoi...\n", tdL.idThread);
+    printf("[Thread %d]Mesajul a fost receptionat...\n", contestant.id);
+    printf("[Thread %d]Trimitem mesajul inapoi...\n", contestant.id);
     bzero(msg, 512);
     fclose(dstFile);
     char message[100] = "File Received!\n\0";
     valread = htonl(strlen(message));
-    write(tdL.cl, &valread, sizeof(valread));
-    if (write(tdL.cl, &message, strlen(message)) <= 0) {
-        printf("[Thread %d] ", tdL.idThread);
+    write(contestant.fd, &valread, sizeof(valread));
+    if (write(contestant.fd, &message, strlen(message)) <= 0) {
+        printf("[Thread %d] ", contestant.id);
         perror("[Thread]Eroare la write() catre client.\n");
     } else {
-        printf("[Thread %d]Mesajul a fost trasmis cu succes.\n", tdL.idThread);
+        printf("[Thread %d]Mesajul a fost trasmis cu succes.\n", contestant.id);
     }
-    close((intptr_t) arg);
-    return (NULL);
+    return 1;
 };
