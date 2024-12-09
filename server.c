@@ -15,13 +15,13 @@
 
 extern int errno;
 
-char * conv_addr (struct sockaddr_in address) {
+char *conv_addr(struct sockaddr_in address) {
     static char str[25];
     char port[7];
-    strcpy (str, inet_ntoa (address.sin_addr));
-    bzero (port, 7);
-    sprintf (port, ":%d", ntohs (address.sin_port));
-    strcat (str, port);
+    strcpy(str, inet_ntoa(address.sin_addr));
+    bzero(port, 7);
+    sprintf(port, ":%d", ntohs(address.sin_port));
+    strcat(str, port);
     return (str);
 }
 
@@ -51,7 +51,7 @@ int main() {
     fd_set actfds;
     struct timeval tv;
     int sd;
-    int optval=1;
+    int optval = 1;
     int len;
     int i = 0;
     int id_cnt = 0;
@@ -76,59 +76,53 @@ int main() {
         perror("[server]Eroare la listen().\n");
         return errno;
     }
-    FD_ZERO (&actfds);
-    FD_SET (sd, &actfds);
+    FD_ZERO(&actfds);
+    FD_SET(sd, &actfds);
     tv.tv_sec = 1;
     tv.tv_usec = 0;
     int nfds = sd;
     while (1) {
-        bcopy ((char *) &actfds, (char *) &readfds, sizeof (readfds));
-        if (select (nfds+1, &readfds, NULL, NULL, &tv) < 0)
-        {
-            perror ("[server] Eroare la select().\n");
+        bcopy((char *) &actfds, (char *) &readfds, sizeof (readfds));
+        if (select(nfds + 1, &readfds, NULL, NULL, &tv) < 0) {
+            perror("[server] Eroare la select().\n");
             return errno;
         }
-        if (FD_ISSET (sd, &readfds))
-        {
+        if (FD_ISSET(sd, &readfds)) {
             len = sizeof (from);
-            bzero (&from, sizeof (from));
+            bzero(&from, sizeof (from));
             int client = accept(sd, (struct sockaddr *) &from, &len);
-            if (client < 0)
-            {
-                perror ("[server] Eroare la accept().\n");
+            if (client < 0) {
+                perror("[server] Eroare la accept().\n");
                 continue;
             }
 
             if (nfds < client)
                 nfds = client;
-            FD_SET (client, &actfds);
-            printf("[server] S-a conectat clientul cu descriptorul %d, de la adresa %s.\n",client, conv_addr (from));
+            FD_SET(client, &actfds);
+            printf("[server] S-a conectat clientul cu descriptorul %d, de la adresa %s.\n", client, conv_addr(from));
             struct Contestant contestant;
             contestant.fd = client;
             contestant.id = id_cnt++;
             contestants[contestants_size++] = contestant;
-            fflush (stdout);
+            fflush(stdout);
         }
-        for (int fd = 0; fd <= nfds; fd++)
-        {
-            if (fd != sd && FD_ISSET (fd, &readfds))
-            {
+        for (int fd = 0; fd <= nfds; fd++) {
+            if (fd != sd && FD_ISSET(fd, &readfds)) {
                 struct Contestant contestant = findContestant(fd);
-                if (client_handler(contestant))
-                {
-                    printf ("[server] S-a deconectat clientul cu descriptorul %d.\n",fd);
-                    fflush (stdout);
-                    close (fd);
-                    FD_CLR (fd, &actfds);
+                if (client_handler(contestant)) {
+                    printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
+                    fflush(stdout);
+                    close(fd);
+                    FD_CLR(fd, &actfds);
                 }
             }
         }
     }
-};
+}
 
 int client_handler(struct Contestant contestant) {
     const char *directory_name = "UserSources\0";
-    printf("[thread]- %d - Asteptam mesajul...\n", contestant.id);
+    printf("[Concurent]- %d - Asteptam mesajul...\n", contestant.id);
     struct stat st = {0};
     if (stat(directory_name, &st) == -1) {
         if (mkdir(directory_name, 0777) == -1) {
@@ -144,28 +138,36 @@ int client_handler(struct Contestant contestant) {
     int valread;
     while (1) {
         int tmp;
-        read(contestant.fd, &tmp, sizeof(tmp));
+        if (read(contestant.fd, &tmp, sizeof(tmp)) <= 0) {
+            return 1;
+        }
         valread = ntohl(tmp);
         if (valread == 0) {
             break;
         }
-        read(contestant.fd, &msg, valread);
+        if (read(contestant.fd, &msg, valread) <= 0) {
+            return 1;
+        }
         fwrite(msg, 1, valread, dstFile);
         bzero(msg, sizeof(msg));
         fflush(dstFile);
     }
-    printf("[Thread %d]Mesajul a fost receptionat...\n", contestant.id);
-    printf("[Thread %d]Trimitem mesajul inapoi...\n", contestant.id);
+    printf("[Concurent %d]Mesajul a fost receptionat...\n", contestant.id);
+    printf("[Concurent %d]Trimitem mesajul inapoi...\n", contestant.id);
     bzero(msg, 512);
     fclose(dstFile);
     char message[100] = "File Received!\n\0";
     valread = htonl(strlen(message));
-    write(contestant.fd, &valread, sizeof(valread));
+    if (write(contestant.fd, &valread, sizeof(valread)) <= 0) {
+        printf("[Concurent %d] ", contestant.id);
+        perror("[Concurent]Eroare la write() catre client.\n");
+    }
     if (write(contestant.fd, &message, strlen(message)) <= 0) {
-        printf("[Thread %d] ", contestant.id);
-        perror("[Thread]Eroare la write() catre client.\n");
-    } else {
-        printf("[Thread %d]Mesajul a fost trasmis cu succes.\n", contestant.id);
+        printf("[Concurent %d] ", contestant.id);
+        perror("[Concurent]Eroare la write() catre client.\n");
+    }
+    else {
+        printf("[Concurent %d]Mesajul a fost trasmis cu succes.\n", contestant.id);
     }
     return 1;
 };

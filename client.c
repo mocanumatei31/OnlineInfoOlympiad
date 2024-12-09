@@ -19,7 +19,7 @@ int main(void) {
     int nr = 0;
     char msg[1024];
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-        perror("Eroare la socket().\n");
+        perror("Socket Error().\n");
         return errno;
     }
     server.sin_family = AF_INET;
@@ -40,7 +40,10 @@ int main(void) {
         msg[strlen(msg) - 1] = '\0';
         fflush(stdout);
         realmsg = realpath(msg, NULL);
-        srcFile = fopen(realmsg, "rb");
+        char *extension = strrchr(realmsg, '.');
+        if (strcmp(extension, ".c") == 0 || strcmp(extension, ".cpp")) {
+            srcFile = fopen(realmsg, "rb");
+        }
     }
     printf("[client] Se trimite fisierul %s\n", realmsg);
     fflush(stdout);
