@@ -41,7 +41,7 @@ int main(void) {
         fflush(stdout);
         realmsg = realpath(msg, NULL);
         char *extension = strrchr(realmsg, '.');
-        if (strcmp(extension, ".c") == 0 || strcmp(extension, ".cpp")) {
+        if (strcmp(extension, ".c") == 0 || strcmp(extension, ".cpp") == 0) {
             srcFile = fopen(realmsg, "rb");
         }
     }
