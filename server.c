@@ -28,17 +28,21 @@ char *conv_addr(struct sockaddr_in address) {
 typedef struct Contestant {
     int id;
     int fd;
+    int isActive;
 } thData;
 
 struct Contestant contestants[100];
 int contestants_size;
 
-int client_handler(struct Contestant contestant);
+int contestants_scores[1000];
 
-struct Contestant findContestant(int fd) {
+int client_handler(struct Contestant contestant);
+int run_solution(int id);
+
+int findContestant(int fd) {
     for (int i = 0; i < contestants_size; i++) {
-        if (contestants[i].fd == fd) {
-            return contestants[i];
+        if (contestants[i].fd == fd && contestants[i].isActive) {
+            return i;
         }
     }
 }
@@ -103,21 +107,42 @@ int main() {
             struct Contestant contestant;
             contestant.fd = client;
             contestant.id = id_cnt++;
+            contestant.isActive = 1;
             contestants[contestants_size++] = contestant;
             fflush(stdout);
         }
         for (int fd = 0; fd <= nfds; fd++) {
             if (fd != sd && FD_ISSET(fd, &readfds)) {
-                struct Contestant contestant = findContestant(fd);
+                int contId = findContestant(fd);
+                struct Contestant contestant = contestants[contId];
                 if (client_handler(contestant)) {
+                    if (contestants[i].isActive) {
+                        run_solution(contestants[i].id);
+                    }
                     printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
                     fflush(stdout);
+                    contestants[contId].isActive = 0;
                     close(fd);
                     FD_CLR(fd, &actfds);
                 }
             }
         }
     }
+    for(int i = 0; i < contestants_size; i++) {
+
+    }
+}
+
+int run_solution(int id) {
+    const char *directory_name = "UserSources\0";
+    char temp[100];
+    sprintf(temp, "%s/source_c%d.c", directory_name, id);
+    char command[300];
+    char ex_name[150];
+    sprintf(ex_name, "source_c%d", id);
+    sprintf(command, "gcc %s -o %s", temp, ex_name);
+    int result = system(command);
+    return result;
 }
 
 int client_handler(struct Contestant contestant) {
