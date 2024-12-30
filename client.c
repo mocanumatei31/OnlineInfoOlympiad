@@ -75,5 +75,15 @@ int main(void) {
     }
     fflush(stdout);
     printf("[client]Mesajul primit este: %s\n", response);
+    read(sd, &val, sizeof(val));
+    val = ntohl(val);
+    char standing[1000];
+    bzero(standing, 1000);
+    if(read(sd, &standing, val) <= 0) {
+        return errno;
+    }
+    standing[val + 1] = '\0';
+    printf("%lu\n", strlen(standing));
+    printf("%s\n\n", standing);
     close(sd);
 }

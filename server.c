@@ -29,6 +29,7 @@ typedef struct Contestant {
     int id;
     int fd;
     int isActive;
+    int score;
 } thData;
 
 struct Contestant contestants[100];
@@ -36,6 +37,8 @@ int contestants_size;
 
 int contestants_scores[1000];
 int sent_message[1000];
+int score[1000];
+int has_contest_started = 0;
 
 int client_handler(struct Contestant contestant);
 int run_solution(int id);
@@ -48,6 +51,22 @@ int findContestant(int fd) {
     }
 }
 
+char* generate_standing() {
+    int max_length = 100 * contestants_size;
+    char* standing = (char *)malloc(max_length);
+    bzero(standing, max_length);
+    if(standing == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+    for(int i = 0; i < contestants_size; i++) {
+        char player_string[100];
+        sprintf(player_string, "%d. Concurent %d - %d Puncte\n\0", i, contestants[i].id, contestants[i].score);
+        strcat(standing, player_string);
+    }
+    standing[strlen(standing) - 1] = '\0';
+    return standing;
+}
 
 int main() {
     struct sockaddr_in server;
@@ -85,8 +104,19 @@ int main() {
     FD_SET(sd, &actfds);
     tv.tv_sec = 1;
     tv.tv_usec = 0;
+    time_t start_time = time(NULL);
     int nfds = sd;
     while (1) {
+        if(!has_contest_started) {
+            has_contest_started = 1;
+            start_time = time(NULL);
+        }
+        if(has_contest_started) {
+            time_t current_time = time(NULL);
+            if(difftime(current_time, start_time) > 30) {
+                break;
+            }
+        }
         bcopy((char *) &actfds, (char *) &readfds, sizeof (readfds));
         if (select(nfds + 1, &readfds, NULL, NULL, &tv) < 0) {
             perror("[server] Eroare la select().\n");
@@ -111,6 +141,7 @@ int main() {
                 contestant.fd = client;
                 contestant.id = id_cnt++;
                 contestant.isActive = 1;
+                contestant.score = 0;
                 contestants[contestants_size++] = contestant;
                 fflush(stdout);
             } else {
@@ -128,11 +159,6 @@ int main() {
                         if (contestants[contId].isActive) {
                             run_solution(contestants[contId].id);
                         }
-                        printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
-                        fflush(stdout);
-                        contestants[contId].isActive = 0;
-                        close(fd);
-                        FD_CLR(fd, &actfds);
                     }
                 }
                 else if(fd != sd && FD_ISSET(fd, &actfds) && !sent_message[fd]) {
@@ -145,6 +171,32 @@ int main() {
             }
         }
     }
+    printf("Reached\n");
+    char* standing = generate_standing();
+    int snd_len = strlen(standing);
+    int stand_len = htonl(snd_len);
+    bcopy((char *) &actfds, (char *) &readfds, sizeof (readfds));
+    if (select(nfds + 1, &readfds, NULL, NULL, &tv) < 0) {
+        perror("[server] Eroare la select().\n");
+        return errno;
+    }
+    printf("%s\n", standing);
+    for (int fd = 0; fd <= nfds; fd++) {
+        if (fd != sd && FD_ISSET(fd, &actfds) && sent_message[fd]) {
+            int contId = findContestant(fd);
+            write(fd, &stand_len, sizeof(stand_len));
+            printf("%s\n", standing);
+            write(fd, &standing, snd_len);
+            printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
+            fflush(stdout);
+            contestants[contId].isActive = 0;
+            close(fd);
+            FD_CLR(fd, &actfds);
+        }
+    }
+    free(standing);
+    return 0;
+
 }
 
 int run_solution(int id) {
@@ -155,9 +207,8 @@ int run_solution(int id) {
     char ex_name[150];
     sprintf(ex_name, "source_c%d", id);
     sprintf(command, "gcc %s -o %s", temp, ex_name);
-    printf("Reached %d\n", id);
     int result = system(command);
-    printf("%d %d\n",id, result);
+    contestants[id].score = result == 0 ? 100 : 0;
     return result;
 }
 
