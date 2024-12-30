@@ -29,6 +29,12 @@ int main(void) {
         perror("Connection Error");
         return errno;
     }
+    char rsp1[1024];
+    int ln = 0;
+    read(sd, &ln, sizeof(ln));
+    ln = ntohl(ln);
+    read(sd, rsp1, ln);
+    printf("%s\n", rsp1);
     FILE *srcFile = NULL;
     char *realmsg = NULL;
     while (srcFile == NULL) {

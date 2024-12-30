@@ -35,6 +35,7 @@ struct Contestant contestants[100];
 int contestants_size;
 
 int contestants_scores[1000];
+int sent_message[1000];
 
 int client_handler(struct Contestant contestant);
 int run_solution(int id);
@@ -120,7 +121,7 @@ int main() {
         }
         if(contestants_size >= 3) {
             for (int fd = 0; fd <= nfds; fd++) {
-                if (fd != sd && FD_ISSET(fd, &readfds)) {
+                if (fd != sd && FD_ISSET(fd, &readfds) && sent_message[fd]) {
                     int contId = findContestant(fd);
                     struct Contestant contestant = contestants[contId];
                     if (client_handler(contestant)) {
@@ -133,6 +134,13 @@ int main() {
                         close(fd);
                         FD_CLR(fd, &actfds);
                     }
+                }
+                else if(fd != sd && FD_ISSET(fd, &actfds) && !sent_message[fd]) {
+                    char* message = "Started\n\0";
+                    int x = htonl(strlen(message));
+                    write(fd, &x, sizeof(x));
+                    write(fd, message, strlen(message));
+                    sent_message[fd] = 1;
                 }
             }
         }
