@@ -92,6 +92,7 @@ int main() {
             return errno;
         }
         if (FD_ISSET(sd, &readfds)) {
+            printf("7\n");
             len = sizeof (from);
             bzero(&from, sizeof (from));
             int client = accept(sd, (struct sockaddr *) &from, &len);
@@ -103,33 +104,38 @@ int main() {
             if (nfds < client)
                 nfds = client;
             FD_SET(client, &actfds);
-            printf("[server] S-a conectat clientul cu descriptorul %d, de la adresa %s.\n", client, conv_addr(from));
-            struct Contestant contestant;
-            contestant.fd = client;
-            contestant.id = id_cnt++;
-            contestant.isActive = 1;
-            contestants[contestants_size++] = contestant;
-            fflush(stdout);
+            if(contestants_size < 3) {
+                printf("[server] S-a conectat clientul cu descriptorul %d, de la adresa %s.\n", client, conv_addr(from));
+                struct Contestant contestant;
+                contestant.fd = client;
+                contestant.id = id_cnt++;
+                contestant.isActive = 1;
+                contestants[contestants_size++] = contestant;
+                fflush(stdout);
+            } else {
+                close(client);
+                FD_CLR(client, &actfds);
+                printf("Client %d respins\n", contestants_size);
+            }
         }
-        for (int fd = 0; fd <= nfds; fd++) {
-            if (fd != sd && FD_ISSET(fd, &readfds)) {
-                int contId = findContestant(fd);
-                struct Contestant contestant = contestants[contId];
-                if (client_handler(contestant)) {
-                    if (contestants[i].isActive) {
-                        run_solution(contestants[i].id);
+        if(contestants_size >= 3) {
+            for (int fd = 0; fd <= nfds; fd++) {
+                if (fd != sd && FD_ISSET(fd, &readfds)) {
+                    int contId = findContestant(fd);
+                    struct Contestant contestant = contestants[contId];
+                    if (client_handler(contestant)) {
+                        if (contestants[contId].isActive) {
+                            run_solution(contestants[contId].id);
+                        }
+                        printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
+                        fflush(stdout);
+                        contestants[contId].isActive = 0;
+                        close(fd);
+                        FD_CLR(fd, &actfds);
                     }
-                    printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
-                    fflush(stdout);
-                    contestants[contId].isActive = 0;
-                    close(fd);
-                    FD_CLR(fd, &actfds);
                 }
             }
         }
-    }
-    for(int i = 0; i < contestants_size; i++) {
-
     }
 }
 
@@ -141,7 +147,9 @@ int run_solution(int id) {
     char ex_name[150];
     sprintf(ex_name, "source_c%d", id);
     sprintf(command, "gcc %s -o %s", temp, ex_name);
+    printf("Reached %d\n", id);
     int result = system(command);
+    printf("%d %d\n",id, result);
     return result;
 }
 
