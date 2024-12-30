@@ -10,6 +10,8 @@
 #include <pthread.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
 #define PORT 8080
 
@@ -39,6 +41,7 @@ int contestants_scores[1000];
 int sent_message[1000];
 int score[1000];
 int has_contest_started = 0;
+int problem_number = 0;
 
 int client_handler(struct Contestant contestant);
 int run_solution(int id);
@@ -100,6 +103,9 @@ int main() {
         perror("[server]Eroare la listen().\n");
         return errno;
     }
+    //srand(time(NULL));
+    //problem_number = rand() % 5 + 1;
+    problem_number = 1;
     FD_ZERO(&actfds);
     FD_SET(sd, &actfds);
     tv.tv_sec = 1;
@@ -172,7 +178,9 @@ int main() {
         }
     }
     printf("Reached\n");
-    char* standing = generate_standing();
+    char* standing = {0};
+    standing = generate_standing();
+    standing[strlen(standing)] = '\0';
     int snd_len = strlen(standing);
     int stand_len = htonl(snd_len);
     bcopy((char *) &actfds, (char *) &readfds, sizeof (readfds));
@@ -180,13 +188,14 @@ int main() {
         perror("[server] Eroare la select().\n");
         return errno;
     }
-    printf("%s\n", standing);
     for (int fd = 0; fd <= nfds; fd++) {
         if (fd != sd && FD_ISSET(fd, &actfds) && sent_message[fd]) {
             int contId = findContestant(fd);
             write(fd, &stand_len, sizeof(stand_len));
-            printf("%s\n", standing);
-            write(fd, &standing, snd_len);
+            if(write(fd, standing, strlen(standing)) <= 0) {
+                perror("[server] Eroare la write.\n");
+                return errno;
+            }
             printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
             fflush(stdout);
             contestants[contId].isActive = 0;
@@ -199,6 +208,37 @@ int main() {
 
 }
 
+int compare_output(int test) {
+    char outputfile[1000] = {0};
+    sprintf(outputfile, "Tests/Problem%d/output%d.txt\0", problem_number, test);
+    char expfile[1000] = {0};
+    sprintf(expfile, "Tests/Problem%d/exp_output%d.txt\0", problem_number, test);
+    FILE* fp = fopen(outputfile, "r");
+    FILE* exp_fp = fopen(expfile, "r");
+    if (fp == NULL || exp_fp == NULL) {
+        perror("[server] Eroare la open.\n");
+        return errno;
+    }
+    char buf1[1024];
+    char buf2[1024];
+    while(fgets(buf1, sizeof(buf1), fp) && fgets(buf2, sizeof(buf2), exp_fp)) {
+        if(strcmp(buf1, buf2) != 0) {
+            printf("%s %s\n",buf1, buf2);
+            fclose(fp);
+            fclose(exp_fp);
+            return 0;
+        }
+    }
+    if(fgets(buf1, sizeof(buf1), fp) || fgets(buf2, sizeof(buf2), exp_fp)) {
+        fclose(fp);
+        fclose(exp_fp);
+        return 0;
+    }
+    fclose(fp);
+    fclose(exp_fp);
+    return 1;
+}
+
 int run_solution(int id) {
     const char *directory_name = "UserSources\0";
     char temp[100];
@@ -207,9 +247,52 @@ int run_solution(int id) {
     char ex_name[150];
     sprintf(ex_name, "source_c%d", id);
     sprintf(command, "gcc %s -o %s", temp, ex_name);
+    sprintf(ex_name, "./source_c%d", id);
     int result = system(command);
-    contestants[id].score = result == 0 ? 100 : 0;
-    return result;
+    //if(result != 0) {
+    //    contestants[id].score = 0;
+    //    return 0;
+    //}
+    for(int i = 1; i <= 5; i++) {
+        int pid = fork();
+        if(pid == 0) {
+            char testfile[1000] = {0};
+            sprintf(testfile, "Tests/Problem%d/test%d.txt\0", problem_number, i);
+            int fd = open(testfile, O_RDONLY);
+            char outputfile[1000] = {0};
+            sprintf(outputfile, "Tests/Problem%d/output%d.txt\0", problem_number, i);
+            int fd_out = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if(fd < 0) {
+                perror("[server] Eroare la open().\n");
+                return errno;
+            }
+            if(dup2(fd, STDIN_FILENO) < 0) {
+                perror("[server] Eroare la dup2().\n");
+                return errno;
+            }
+            if(fd_out < 0) {
+                perror("[server] Eroare la open().\n");
+                return errno;
+            }
+            if(dup2(fd_out, STDOUT_FILENO) < 0) {
+                perror("[server] Eroare la dup2().\n");
+                return errno;
+            }
+            close(fd);
+            close(fd_out);
+            char* args[] = {ex_name, NULL};
+            execv(ex_name, args);
+            exit(1);
+        }
+        else {
+            int status;
+            waitpid(pid, &status, 0);
+            int test_res = compare_output(i);
+            if(test_res == 1) contestants[id].score += 20;
+        }
+    }
+    //contestants[id].score = result == 0 ? 100 : 0;
+    return 1;
 }
 
 int client_handler(struct Contestant contestant) {

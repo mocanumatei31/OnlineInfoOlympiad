@@ -34,6 +34,7 @@ int main(void) {
     read(sd, &ln, sizeof(ln));
     ln = ntohl(ln);
     read(sd, rsp1, ln);
+    rsp1[ln] = '\0';
     printf("%s\n", rsp1);
     FILE *srcFile = NULL;
     char *realmsg = NULL;
@@ -75,15 +76,15 @@ int main(void) {
     }
     fflush(stdout);
     printf("[client]Mesajul primit este: %s\n", response);
-    read(sd, &val, sizeof(val));
-    val = ntohl(val);
-    char standing[1000];
-    bzero(standing, 1000);
-    if(read(sd, &standing, val) <= 0) {
+    fflush(stdout);
+    int val2 = 0;
+    read(sd, &val2, sizeof(val2));
+    val2 = ntohl(val2);
+    char standing[1000] = {0};
+    if(read(sd, &standing, val2) <= 0) {
         return errno;
     }
-    standing[val + 1] = '\0';
-    printf("%lu\n", strlen(standing));
-    printf("%s\n\n", standing);
+    standing[val2 + 1] = '\0';
+    printf("%s\n", standing);
     close(sd);
 }
