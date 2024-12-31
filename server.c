@@ -103,9 +103,8 @@ int main() {
         perror("[server]Eroare la listen().\n");
         return errno;
     }
-    //srand(time(NULL));
-    //problem_number = rand() % 5 + 1;
-    problem_number = 1;
+    srand(time(NULL));
+    problem_number = rand() % 2 + 1;
     FD_ZERO(&actfds);
     FD_SET(sd, &actfds);
     tv.tv_sec = 1;
@@ -176,10 +175,21 @@ int main() {
                     }
                 }
                 else if(fd != sd && FD_ISSET(fd, &actfds) && !sent_message[fd]) {
-                    char* message = "Started\n\0";
-                    int x = htonl(strlen(message));
+                    char problem_text[1024] = {0};
+                    char problem_file[1024] = {0};
+                    bzero(problem_file, sizeof (problem_file));
+                    bzero(problem_text, sizeof (problem_text));
+                    sprintf(problem_file, "Problems/Problem%d.txt\0", problem_number);
+                    FILE* fp = fopen(problem_file, "r");
+                    int x;
+                    while((x = fread(problem_text, 1, 1024, fp)) > 0) {
+                        int bytes_read = htonl(x);
+                        write(fd, &bytes_read, sizeof(bytes_read));
+                        write(fd, problem_text, x);
+                        bzero(problem_text, sizeof (problem_text));
+                    }
+                    x = 0;
                     write(fd, &x, sizeof(x));
-                    write(fd, message, strlen(message));
                     sent_message[fd] = 1;
                 }
             }

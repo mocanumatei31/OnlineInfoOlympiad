@@ -29,13 +29,17 @@ int main(void) {
         perror("Connection Error");
         return errno;
     }
-    char rsp1[1024];
-    int ln = 0;
-    read(sd, &ln, sizeof(ln));
-    ln = ntohl(ln);
-    read(sd, rsp1, ln);
-    rsp1[ln] = '\0';
-    printf("%s\n", rsp1);
+    char rsp1[1025];
+    while(1) {
+        int ln = 0;
+        read(sd, &ln, sizeof(ln));
+        ln = ntohl(ln);
+        if(ln == 0) break;
+        read(sd, rsp1, ln);
+        rsp1[ln] = '\0';
+        printf("%s", rsp1);
+    }
+    fflush(stdout);
     FILE *srcFile = NULL;
     char *realmsg = NULL;
     while (srcFile == NULL) {
@@ -49,7 +53,6 @@ int main(void) {
         realmsg = realpath(msg, NULL);
         if(realmsg != NULL) {
             char *extension = strrchr(realmsg, '.');
-            printf("%s\n", extension);
             if (extension != NULL && strcmp(extension, ".c") == 0 || strcmp(extension, ".cpp") == 0) {
                 srcFile = fopen(realmsg, "rb");
             }

@@ -1,0 +1,13 @@
+Primind un numar variabil de caractere de la tastatura separate prin enter, afisati produsul lor.
+
+Input: stdin
+
+Output : stdout
+
+Exemplu Input:
+10
+20
+30
+
+Output Asteptat:
+6000
