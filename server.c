@@ -161,10 +161,18 @@ int main() {
                 if (fd != sd && FD_ISSET(fd, &readfds) && sent_message[fd]) {
                     int contId = findContestant(fd);
                     struct Contestant contestant = contestants[contId];
-                    if (client_handler(contestant)) {
+                    int run_result = client_handler(contestant);
+                    if (run_result == 1) {
                         if (contestants[contId].isActive) {
                             run_solution(contestants[contId].id);
                         }
+                    }
+                    else if (run_result == -1) {
+                        printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
+                        fflush(stdout);
+                        contestants[contId].isActive = 0;
+                        close(fd);
+                        FD_CLR(fd, &actfds);
                     }
                 }
                 else if(fd != sd && FD_ISSET(fd, &actfds) && !sent_message[fd]) {
@@ -314,14 +322,14 @@ int client_handler(struct Contestant contestant) {
     while (1) {
         int tmp;
         if (read(contestant.fd, &tmp, sizeof(tmp)) <= 0) {
-            return 1;
+            return -1;
         }
         valread = ntohl(tmp);
         if (valread == 0) {
             break;
         }
         if (read(contestant.fd, &msg, valread) <= 0) {
-            return 1;
+            return -1;
         }
         fwrite(msg, 1, valread, dstFile);
         bzero(msg, sizeof(msg));

@@ -47,9 +47,12 @@ int main(void) {
         msg[strlen(msg) - 1] = '\0';
         fflush(stdout);
         realmsg = realpath(msg, NULL);
-        char *extension = strrchr(realmsg, '.');
-        if (strcmp(extension, ".c") == 0 || strcmp(extension, ".cpp") == 0) {
-            srcFile = fopen(realmsg, "rb");
+        if(realmsg != NULL) {
+            char *extension = strrchr(realmsg, '.');
+            printf("%s\n", extension);
+            if (extension != NULL && strcmp(extension, ".c") == 0 || strcmp(extension, ".cpp") == 0) {
+                srcFile = fopen(realmsg, "rb");
+            }
         }
     }
     printf("[client] Se trimite fisierul %s\n", realmsg);
