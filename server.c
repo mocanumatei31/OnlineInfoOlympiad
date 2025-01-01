@@ -34,14 +34,22 @@ typedef struct Contestant {
     int score;
 } thData;
 
+typedef struct ConfigEntry {
+    char key[100];
+    char value[100];
+};
+
 struct Contestant contestants[100];
 int contestants_size;
+
+int max_contestants_size = 0;
 
 int contestants_scores[1000];
 int sent_message[1000];
 int score[1000];
 int has_contest_started = 0;
 int problem_number = 0;
+int contest_length = 0;
 
 int client_handler(struct Contestant contestant);
 int run_solution(int id);
@@ -69,6 +77,35 @@ char* generate_standing() {
     }
     standing[strlen(standing) - 1] = '\0';
     return standing;
+}
+
+void parse_config() {
+    FILE* config = fopen("config.txt", "r");
+    struct ConfigEntry config_entries[10];
+    int num_entries = 0;
+    char line[100];
+    while(fgets(line, sizeof(line), config) != NULL) {
+        char* equal_sign = strchr(line, '=');
+        char key[100];
+        strncpy(key, line, equal_sign - line);
+        key[equal_sign - line] = '\0';
+        char value[100];
+        strcpy(value, equal_sign + 1);
+        value[equal_sign - line] = '\0';
+        num_entries++;
+        strcpy(config_entries[num_entries].key, key);
+        strcpy(config_entries[num_entries].value, value);
+        printf("%s : %s\n", config_entries[num_entries].key, config_entries[num_entries].value);
+
+    }
+    for(int i = 1; i <= num_entries; i++) {
+        if(strcmp(config_entries[i].key, "max_participanti") == 0) {
+            max_contestants_size = atoi(config_entries[i].value);
+        }
+        else if(strcmp(config_entries[i].key, "durata_maxima_problema") == 0) {
+            contest_length = atoi(config_entries[i].value);
+        }
+    }
 }
 
 int main() {
@@ -105,6 +142,7 @@ int main() {
     }
     srand(time(NULL));
     problem_number = rand() % 2 + 1;
+    parse_config();
     FD_ZERO(&actfds);
     FD_SET(sd, &actfds);
     tv.tv_sec = 1;
@@ -118,7 +156,7 @@ int main() {
         }
         if(has_contest_started) {
             time_t current_time = time(NULL);
-            if(difftime(current_time, start_time) > 30) {
+            if(difftime(current_time, start_time) > contest_length) {
                 break;
             }
         }
@@ -128,7 +166,6 @@ int main() {
             return errno;
         }
         if (FD_ISSET(sd, &readfds)) {
-            printf("7\n");
             len = sizeof (from);
             bzero(&from, sizeof (from));
             int client = accept(sd, (struct sockaddr *) &from, &len);
@@ -140,7 +177,7 @@ int main() {
             if (nfds < client)
                 nfds = client;
             FD_SET(client, &actfds);
-            if(contestants_size < 3) {
+            if(contestants_size < max_contestants_size) {
                 printf("[server] S-a conectat clientul cu descriptorul %d, de la adresa %s.\n", client, conv_addr(from));
                 struct Contestant contestant;
                 contestant.fd = client;
@@ -155,7 +192,7 @@ int main() {
                 printf("Client %d respins\n", contestants_size);
             }
         }
-        if(contestants_size >= 3) {
+        if(contestants_size >= max_contestants_size) {
             for (int fd = 0; fd <= nfds; fd++) {
                 if (fd != sd && FD_ISSET(fd, &readfds) && sent_message[fd]) {
                     int contId = findContestant(fd);

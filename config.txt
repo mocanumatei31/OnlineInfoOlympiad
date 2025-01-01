@@ -1,0 +1,2 @@
+max_participanti=3
+durata_maxima_problema=30
