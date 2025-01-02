@@ -62,6 +62,12 @@ int findContestant(int fd) {
     }
 }
 
+int compare_by_score(const void* a, const void* b) {
+    struct Contestant c1 = *(struct Contestant *)a;
+    struct Contestant c2 = *(struct Contestant *)b;
+    return c2.score - c1.score;
+}
+
 char* generate_standing() {
     int max_length = 100 * contestants_size;
     char* standing = (char *)malloc(max_length);
@@ -70,9 +76,10 @@ char* generate_standing() {
         perror("malloc");
         exit(1);
     }
+    qsort(contestants, contestants_size, sizeof(struct Contestant), compare_by_score);
     for(int i = 0; i < contestants_size; i++) {
         char player_string[100];
-        sprintf(player_string, "%d. Concurent %d - %d Puncte\n\0", i, contestants[i].id, contestants[i].score);
+        sprintf(player_string, "%d. Concurent %d - %d Puncte\n\0", i + 1, contestants[i].id, contestants[i].score);
         strcat(standing, player_string);
     }
     standing[strlen(standing) - 1] = '\0';
@@ -304,10 +311,10 @@ int run_solution(int id) {
     sprintf(command, "gcc %s -o %s", temp, ex_name);
     sprintf(ex_name, "./source_c%d", id);
     int result = system(command);
-    //if(result != 0) {
-    //    contestants[id].score = 0;
-    //    return 0;
-    //}
+    if(result != 0) {
+        contestants[id].score = 0;
+        return 0;
+    }
     for(int i = 1; i <= 5; i++) {
         int pid = fork();
         if(pid == 0) {
@@ -336,6 +343,7 @@ int run_solution(int id) {
             close(fd);
             close(fd_out);
             char* args[] = {ex_name, NULL};
+            alarm(2);
             execv(ex_name, args);
             exit(1);
         }
