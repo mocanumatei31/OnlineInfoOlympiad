@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -49,7 +50,11 @@ int sent_message[1000];
 int score[1000];
 int has_contest_started = 0;
 int problem_number = 0;
+int nr_problems = 0;
 int contest_length = 0;
+const char* exec_words[] = {
+    "execl", "execlp", "execle", "execv", "execvp", "execvpe", "execve"
+};
 
 int client_handler(struct Contestant contestant);
 int run_solution(int id);
@@ -112,7 +117,40 @@ void parse_config() {
         else if(strcmp(config_entries[i].key, "durata_maxima_problema") == 0) {
             contest_length = atoi(config_entries[i].value);
         }
+        else if(strcmp(config_entries[i].key, "nr_probleme") == 0) {
+            nr_problems = atoi(config_entries[i].value);
+        }
     }
+}
+
+void to_lower(char* str) {
+    for(int i = 0; str[i] != 0; i++) {
+        str[i] = tolower(str[i]);
+    }
+}
+
+int contains_malitious(char* filename) {
+    FILE* file = fopen(filename, "r");
+    char line[300];
+    while(fgets(line, sizeof(line), file) != NULL) {
+        char* token;
+        char delimiters[] = "\t\n.,;?!\"'()[]{}<>/\\|+-=";
+        char word[100];
+        token = strtok(line, delimiters);
+        while(token != NULL) {
+            strcpy(word, token);
+            to_lower(word);
+            for(int i = 0; i < 7; i++) {
+                if(strcmp(word, exec_words[i]) == 0) {
+                    fclose(file);
+                    return 1;
+                }
+            }
+            token = strtok(NULL, delimiters);
+        }
+    }
+    fclose(file);
+    return 0;
 }
 
 int main() {
@@ -148,8 +186,8 @@ int main() {
         return errno;
     }
     srand(time(NULL));
-    problem_number = rand() % 2 + 1;
     parse_config();
+    problem_number = rand() % nr_problems + 1;
     FD_ZERO(&actfds);
     FD_SET(sd, &actfds);
     tv.tv_sec = 1;
@@ -285,7 +323,6 @@ int compare_output(int test) {
     char buf2[1024];
     while(fgets(buf1, sizeof(buf1), fp) && fgets(buf2, sizeof(buf2), exp_fp)) {
         if(strcmp(buf1, buf2) != 0) {
-            printf("%s %s\n",buf1, buf2);
             fclose(fp);
             fclose(exp_fp);
             return 0;
@@ -305,6 +342,10 @@ int run_solution(int id) {
     const char *directory_name = "UserSources\0";
     char temp[100];
     sprintf(temp, "%s/source_c%d.c", directory_name, id);
+    if(contains_malitious(temp)) {
+        contestants[id].score = 0;
+        return 0;
+    }
     char command[300];
     char ex_name[150];
     sprintf(ex_name, "source_c%d", id);
