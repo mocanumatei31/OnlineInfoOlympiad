@@ -262,6 +262,15 @@ int main() {
                     bzero(problem_file, sizeof (problem_file));
                     bzero(problem_text, sizeof (problem_text));
                     sprintf(problem_file, "Problems/Problem%d.txt\0", problem_number);
+                    int contestant_id = findContestant(fd);
+                    char comm_id[105] = {0};
+                    bzero(comm_id, sizeof(comm_id));
+                    sprintf(comm_id, "Id-ul tau este %d.\n", contestant_id);
+                    //comm_id[strlen(comm_id)-1] = '\0';
+                    int id_len = strlen(comm_id);
+                    id_len = htonl(id_len);
+                    write(fd, &id_len, sizeof (id_len));
+                    write(fd, comm_id, strlen(comm_id));
                     FILE* fp = fopen(problem_file, "r");
                     int x;
                     while((x = fread(problem_text, 1, 1024, fp)) > 0) {
@@ -273,6 +282,19 @@ int main() {
                     x = 0;
                     write(fd, &x, sizeof(x));
                     sent_message[fd] = 1;
+                }
+            }
+        }
+        else {
+            for (int fd = 0; fd <= nfds; fd++) {
+                if (fd != sd && FD_ISSET(fd, &readfds)) {
+                    printf("[server] S-a deconectat clientul cu descriptorul %d.\n", fd);
+                    fflush(stdout);
+                    int contId = findContestant(fd);
+                    contestants[contId].isActive = 0;
+                    contestants_size--;
+                    close(fd);
+                    FD_CLR(fd, &actfds);
                 }
             }
         }
